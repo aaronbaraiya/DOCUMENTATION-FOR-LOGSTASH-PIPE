@@ -1,0 +1,148 @@
+
+# IIS Log Ingestion Pipeline - Full Setup and Operation
+
+## Overview
+This pipeline ingests, parses, and stores IIS log data using Logstash, Fluentd, and PostgreSQL (with TimescaleDB). It supports:
+
+- Full IIS log parsing with Grok and KV filters
+- Cookie extraction and URI normalization
+- Classification of static vs dynamic traffic
+- Storage in PostgreSQL tables
+- Monitoring via Grafana
+
+---
+
+## 1. Logstash Configuration
+**Location:** `~/logstash_configs/logstash.conf`
+
+### Key Features:
+- Reads from two log files:
+  - `/home/aaronbadmin@domain-msi.local/iis_logs/intranet/u_ex250414_x.log`
+  - `/home/aaronbadmin@domain-msi.local/iis_logs/tablet/u_ex250414_x.log`
+- Parses fields with Grok
+- Extracts usernames from cookies
+- Normalizes URIs
+- Detects static vs dynamic content
+- Sends data via HTTP to Fluentd on different endpoints based on record type or parse failure
+
+### Commands:
+```bash
+cat ~/logstash_configs/logstash.conf     # View
+nano ~/logstash_configs/logstash.conf    # Edit
+sudo /usr/share/logstash/bin/logstash -f ~/logstash_configs/logstash.conf  # Start
+pkill -f logstash                        # Stop
+```
+
+---
+
+## 2. Fluentd Configuration
+**Location:** `~/fluentd_conf/fluent.conf`
+
+### Key Features:
+- HTTP input on port 9880
+- Routes logs to:
+  - `iis_log_records` (full data)
+  - `iis_logs_static` (static files)
+  - `iis_log_failures` (grok failures)
+- Uses `postgres_bulk` for performance
+
+### Commands:
+```bash
+cat ~/fluentd_conf/fluent.conf          # View
+nano ~/fluentd_conf/fluent.conf         # Edit
+fluentd --config ~/fluentd_conf/fluent.conf  # Start
+pkill -f fluentd                        # Stop
+```
+
+---
+
+## 3. PostgreSQL Schema
+**Database:** `iis_logs`
+
+### Tables:
+
+#### iis_log_records
+- `v_datetime TIMESTAMPTZ NOT NULL`
+- `c_ip INET`
+- `cs_cookie TEXT`
+- `cs_host TEXT`
+- `cs_referer TEXT`
+- `cs_uri_query TEXT`
+- `cs_uri_stem TEXT`
+- `cs_username TEXT`
+- `s_computername TEXT`
+- `sc_status INT`
+- `time_taken INT`
+- `sc_bytes INT`
+- `cs_bytes INT`
+- **Index:** btree on `v_datetime DESC`
+- **TimescaleDB:** Hypertable with insert blocker
+
+#### iis_logs_static
+- `v_datetime TIMESTAMPTZ`
+- `cs_username TEXT`
+- `cs_uri_stem TEXT`
+- **Indexes:** On `v_datetime`, `cs_uri_stem`, and `cs_username`
+
+#### iis_log_failures
+- `id SERIAL PRIMARY KEY`
+- `failure_time TIMESTAMPTZ DEFAULT now()`
+- `reason TEXT`
+- `raw_log TEXT`
+
+### Command to Open SQL Prompt:
+```bash
+sudo -u postgres psql -d iis_logs
+```
+
+---
+
+## 4. Virtual Machine Access
+
+### SSH into VM:
+```bash
+ssh -p 2212 aaronbadmin@dcir-sandbox7.domain-msi.local
+```
+
+### Open Grafana in Browser:
+Run outside the VM:
+```bash
+ssh -vvv -L 3001:localhost:3000 -p 2212 aaronbadmin@dcir-sandbox7.domain-msi.local
+```
+Then open:
+```
+http://localhost:3001/
+```
+
+---
+
+## 5. CSV Export and File Access
+
+### Export file from VM:
+```bash
+scp -P 2212 aaronbadmin@dcir-sandbox7.domain-msi.local:/tmp/final_normalized_cs_uri_stem_v2.csv .
+```
+
+### Open export in file explorer:
+```bash
+explorer .
+```
+
+---
+
+## 6. Process Monitoring
+```bash
+ps aux | grep fluentd
+ps aux | grep logstash
+```
+
+---
+
+## Status: ✅ Complete
+- Logstash and Fluentd configs tested and stable
+- PostgreSQL ingestion and indexing verified
+- Cookie parsing and classification working
+- Grok failures handled separately
+- Compatible with TimescaleDB
+
+> Last updated: August 2025
