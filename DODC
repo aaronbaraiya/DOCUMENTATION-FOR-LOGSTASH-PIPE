@@ -138,7 +138,7 @@ ps aux | grep logstash
 
 ---
 
-## Status: ✅ Complete
+## Status:  Complete
 - Logstash and Fluentd configs tested and stable
 - PostgreSQL ingestion and indexing verified
 - Cookie parsing and classification working
